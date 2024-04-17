@@ -9,10 +9,12 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
+TOKEN = ''
+
 queue = []
 
-
-client = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+client = commands.Bot(command_prefix='!', intents=discord.Intents.all(),
+                      activity=discord.Activity(type=discord.ActivityType.playing, name="with your feelings"))
 
 
 @client.event
@@ -31,30 +33,36 @@ class MyView(discord.ui.View):
     @discord.ui.button(label="⏭️", style=discord.ButtonStyle.success)
     async def skip_button(self, interaction: discord.Interaction, button=discord.ui.Button):
         self.voice_client.stop()
-        await interaction.response.send_message("Next song")
+        if len(queue) > 0:
+            await interaction.response.send_message("Следваща песен")
+        else:
+            await self.voice_client.disconnect()
+            await self.message.delete()
+            await interaction.response.send_message("Туй то,няя повече")
 
     @discord.ui.button(label="⏸️", style=discord.ButtonStyle.grey)
-    async def pause_button(self, interaction: discord.Interaction,  button=discord.ui.Button):
+    async def pause_button(self, interaction: discord.Interaction, button=discord.ui.Button):
         if self.button_pressed:
-            await interaction.response.send_message("already paused")
+            await interaction.response.send_message("Песента вече е паузирана")
         else:
             self.voice_client.pause()
-            await interaction.response.send_message("Pause")
+            await interaction.response.send_message("Пауза")
 
     @discord.ui.button(label="▶️", style=discord.ButtonStyle.primary)
     async def resume_button(self, interaction: discord.Interaction, button=discord.ui.Button):
         if self.button_pressed:
-            await interaction.response.send_message("Already playing")
+            await interaction.response.send_message("Песента вече тече")
         else:
             self.voice_client.resume()
             self.button_pressed = True
-            await interaction.response.send_message("Playing")
+            await interaction.response.send_message("Пускане")
 
-    @discord.ui.button(label="Leave", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="⏹️", style=discord.ButtonStyle.red)
     async def leave_button(self, interaction: discord.Interaction, button=discord.ui.Button):
         await self.voice_client.disconnect()
-        await self.message.edit(view=None)
-        await interaction.response.send_message("Bye")
+        message = interaction.message
+        await message.edit(view=None)
+        await interaction.response.send_message("As Bojinkata once said: Аааайде")
 
 
 async def play_next_song(voice_client, text_channel, message):
@@ -64,7 +72,7 @@ async def play_next_song(voice_client, text_channel, message):
                                                                                       "-reconnect_streamed 1 "
                                                                                       "-reconnect_delay_max 10")
         if source is None:
-            await text_channel.send('Can`t load audio, please try again!')
+            await text_channel.send('Не можах да заредя аудиото. Моля опитайте отново.')
             await voice_client.disconnect()
             return
         song_duration = info.get('duration', 0)
@@ -74,11 +82,11 @@ async def play_next_song(voice_client, text_channel, message):
                                                                                    client.loop))
         thumbnail_url = info.get('thumbnail', None)
         embed = discord.Embed(title=f"**{info['title']}**",
-                              description=f"{message.author.mention} requested this song",
-                              color=discord.Color.blue())
+                              description=f"Тая песен я пусна е те тоя борсук: {message.author.mention}",
+                              color=discord.Color.red())
         if song_duration:
             duration = datetime.timedelta(seconds=song_duration)
-            embed.add_field(name="Length of the song:", value=str(duration), inline=True)
+            embed.add_field(name="Ей толко време ся ше ни дрънчи в ушите:", value=str(duration), inline=True)
         if thumbnail_url:
             embed.set_thumbnail(url=thumbnail_url)
 
@@ -96,14 +104,19 @@ async def p(ctx, *, query):
     if not voice_client:
         voice = ctx.author.voice
         if not voice:
-            await ctx.send("Nobody in voice chat")
+            await ctx.send("няма никой във войс чата")
             return
         voice_client = await voice.channel.connect()
 
     with yt_dlp.YoutubeDL({'format': 'bestaudio', 'noplaylist': 'True'}) as ydl:
         info = ydl.extract_info(f"ytsearch:{query}", download=False)['entries'][0]
     queue.append(info)
-    if not voice_client.is_playing():
+    if voice_client.is_playing():
+        embed_next = discord.Embed(title="Добавена е нова песен в опашката",
+                                   description=f'Следваща песен: "**{info["title"]}**"',
+                                   color=discord.Color.green())
+        await ctx.send(embed=embed_next)
+    else:
         await play_next_song(voice_client, ctx.channel, ctx.message)
 
 
@@ -112,7 +125,7 @@ async def q(ctx):
     if len(queue) == 0:
         await ctx.send("Queue is empty.")
         return
-    embed = discord.Embed(title="Queued songs", description="List:", color=discord.Color.red())
+    embed = discord.Embed(title="Заредени песни", description="Списък:", color=discord.Color.red())
     for i, song in enumerate(queue):
         duration = song.get('duration')
         if duration is not None:
@@ -120,7 +133,7 @@ async def q(ctx):
             seconds = duration % 60
             duration_str = f"{minutes}:{seconds:02d}"
         else:
-            duration_str = "Unknown"
+            duration_str = "Непознато"
         embed.add_field(name=f"{i + 1}. {song['title']}", value=f"Duration: {duration_str}", inline=False)
 
     await ctx.send(embed=embed)
@@ -131,9 +144,9 @@ async def pause(ctx):
     voice_client = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if voice_client and voice_client.is_playing():
         voice_client.pause()
-        await ctx.reply("Pause")
+        await ctx.reply("Пауза")
     else:
-        await ctx.reply("Already paused")
+        await ctx.reply("Вече е паузирано")
 
 
 @client.command()
@@ -141,9 +154,9 @@ async def skip(ctx):
     voice_client = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if voice_client and voice_client.is_playing():
         voice_client.stop()
-        await ctx.reply("Next song")
+        await ctx.reply("Следваща песен")
     else:
-        await ctx.reply("Empty Playlist")
+        await ctx.reply("Плейлистът е празен")
 
 
 @client.command()
@@ -151,20 +164,21 @@ async def resume(ctx):
     voice_client = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if voice_client and voice_client.is_paused():
         voice_client.resume()
-        await ctx.reply("Music continues")
+        await ctx.reply("Музиката продължава")
     else:
-        await ctx.reply("Already playing")
+        await ctx.reply("Вече се възпроизвежда")
 
 
 @client.command()
 async def helpme(ctx):
-    help_embed = discord.Embed(title="Commands", description="List of commands:", color=discord.Color.red())
-    help_embed.add_field(name="!p 'link'", value="Plays a song", inline=False)
-    help_embed.add_field(name="!pause", value="Pause", inline=False)
-    help_embed.add_field(name="!resume", value="Resume", inline=False)
-    help_embed.add_field(name="!skip", value="Skip to next song",
+    help_embed = discord.Embed(title="Команди", description="Списък на командите:", color=discord.Color.red())
+    help_embed.add_field(name="!p 'линк'", value="Пуска песен от YouTube", inline=False)
+    help_embed.add_field(name="!pause", value="Паузира вървящата песен", inline=False)
+    help_embed.add_field(name="!resume", value="Продължава вървящата песен", inline=False)
+    help_embed.add_field(name="!skip", value="Прескача текущата песен и продължава със следващата в Queue-то",
                          inline=False)
-    help_embed.add_field(name="!q", value="Shows the queue", inline=False)
+    help_embed.add_field(name="!q", value="Показва заредените песни в плейлиста", inline=False)
+    help_embed.set_footer(text="По бай Тошево време нямаше такива Ботове")
     await ctx.send(embed=help_embed)
 
 
@@ -174,7 +188,7 @@ async def stop(ctx):
     if voice_client and voice_client.is_playing():
         queue.clear()
         voice_client.stop()
-        await ctx.reply("End of playlist")
+        await ctx.reply("Концерта свърши")
     await voice_client.disconnect()
 
 
@@ -184,4 +198,4 @@ async def leave(ctx):
     await voice_client.disconnect()
 
 
-client.run('personal bot key')
+client.run(TOKEN)
