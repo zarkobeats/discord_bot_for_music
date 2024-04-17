@@ -14,7 +14,7 @@ TOKEN = ''
 queue = []
 
 client = commands.Bot(command_prefix='!', intents=discord.Intents.all(),
-                      activity=discord.Activity(type=discord.ActivityType.playing, name="with your feelings"))
+                      activity=discord.Activity(type=discord.ActivityType.playing))
 
 
 @client.event
@@ -82,7 +82,7 @@ async def play_next_song(voice_client, text_channel, message):
                                                                                    client.loop))
         thumbnail_url = info.get('thumbnail', None)
         embed = discord.Embed(title=f"**{info['title']}**",
-                              description=f"Тая песен я пусна е те тоя борсук: {message.author.mention}",
+                              description=f"Тая песен я пусна е те тоз човек: {message.author.mention}",
                               color=discord.Color.red())
         if song_duration:
             duration = datetime.timedelta(seconds=song_duration)
